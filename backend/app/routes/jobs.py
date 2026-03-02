@@ -11,13 +11,16 @@ from app.schemas import JobOut, JobStatusUpdate
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
+
 @router.get("", response_model=list[JobOut])
 def list_jobs(
     status: Optional[str] = None,
     q: Optional[str] = None,
     location: Optional[str] = None,
-    days_min: Optional[int] = None,  # e.g. 3
-    days_max: Optional[int] = None,  # e.g. 7
+    provider: Optional[str] = None,
+    source: Optional[str] = None,
+    days_min: Optional[int] = None,
+    days_max: Optional[int] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
 ):
@@ -25,6 +28,12 @@ def list_jobs(
 
     if status:
         stmt = stmt.where(Job.status == status)
+
+    if provider:
+        stmt = stmt.where(Job.provider == provider)
+
+    if source:
+        stmt = stmt.where(Job.source.ilike(f"%{source}%"))
 
     if q:
         like = f"%{q}%"
@@ -35,12 +44,13 @@ def list_jobs(
 
     if days_min is not None and days_max is not None:
         now = datetime.utcnow()
-        newest = now - timedelta(days=days_min)   # posted <= newest (not too new)
-        oldest = now - timedelta(days=days_max)   # posted >= oldest (not too old)
+        newest = now - timedelta(days=days_min)
+        oldest = now - timedelta(days=days_max)
         stmt = stmt.where(Job.posted_at.isnot(None)).where(Job.posted_at.between(oldest, newest))
 
-    stmt = stmt.order_by(Job.posted_at.desc().nullslast()).limit(limit)
+    stmt = stmt.order_by(Job.posted_at.desc().nullslast(), Job.discovered_at.desc()).limit(limit)
     return list(db.execute(stmt).scalars().all())
+
 
 @router.patch("/{job_id}", response_model=JobOut)
 def update_job_status(job_id: str, payload: JobStatusUpdate, db: Session = Depends(get_db)):

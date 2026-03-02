@@ -9,48 +9,94 @@ services:
       - "5432:5432"
     volumes:
       - jobflow_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobflow -d jobflow -h 127.0.0.1 -p 5432"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   api:
     build: ./backend
     environment:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql://jobflow:jobflow@db:5432/jobflow
+
+      # REAL INGEST (optional) — leave empty to use demo fallback
+      RAPIDAPI_KEY: ""
+      RAPIDAPI_HOST: "jsearch.p.rapidapi.com"
+      JSEARCH_BASE_URL: "https://jsearch.p.rapidapi.com"
+
+      JOBFLOW_QUERIES: "Data Scientist|San Francisco, CA;ML Engineer|Remote - US"
+      JOBFLOW_NUM_PAGES: "1"
+      JOBFLOW_POSTED_MIN_DAYS: "0"
+      JOBFLOW_POSTED_MAX_DAYS: "7"
+      JOBFLOW_DEMO_IF_NO_KEY: "true"
     ports:
       - "8000:8000"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./backend/app:/app/app
+    restart: on-failure
 
   worker:
     build: ./backend
     environment:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql://jobflow:jobflow@db:5432/jobflow
+      RAPIDAPI_KEY: ""
+      RAPIDAPI_HOST: "jsearch.p.rapidapi.com"
+      JSEARCH_BASE_URL: "https://jsearch.p.rapidapi.com"
+      JOBFLOW_QUERIES: "Data Scientist|San Francisco, CA;ML Engineer|Remote - US"
+      JOBFLOW_NUM_PAGES: "1"
+      JOBFLOW_POSTED_MIN_DAYS: "0"
+      JOBFLOW_POSTED_MAX_DAYS: "7"
+      JOBFLOW_DEMO_IF_NO_KEY: "true"
     depends_on:
-      - redis
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./backend/app:/app/app
     command: ["celery", "-A", "app.celery_app.celery", "worker", "-l", "INFO"]
+    restart: on-failure
 
   beat:
     build: ./backend
     environment:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql://jobflow:jobflow@db:5432/jobflow
+      RAPIDAPI_KEY: ""
+      RAPIDAPI_HOST: "jsearch.p.rapidapi.com"
+      JSEARCH_BASE_URL: "https://jsearch.p.rapidapi.com"
+      JOBFLOW_QUERIES: "Data Scientist|San Francisco, CA;ML Engineer|Remote - US"
+      JOBFLOW_NUM_PAGES: "1"
+      JOBFLOW_POSTED_MIN_DAYS: "0"
+      JOBFLOW_POSTED_MAX_DAYS: "7"
+      JOBFLOW_DEMO_IF_NO_KEY: "true"
     depends_on:
-      - redis
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./backend/app:/app/app
     command: ["celery", "-A", "app.celery_app.celery", "beat", "-l", "INFO"]
+    restart: on-failure
 
 volumes:
   jobflow_db:
