@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: jobflow
+      POSTGRES_PASSWORD: jobflow
+      POSTGRES_DB: jobflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - jobflow_db:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  api:
+    build: ./backend
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://jobflow:jobflow@db:5432/jobflow
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./backend/app:/app/app
+
+  worker:
+    build: ./backend
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://jobflow:jobflow@db:5432/jobflow
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ./backend/app:/app/app
+    command: ["celery", "-A", "app.celery_app.celery", "worker", "-l", "INFO"]
+
+  beat:
+    build: ./backend
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql://jobflow:jobflow@db:5432/jobflow
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ./backend/app:/app/app
+    command: ["celery", "-A", "app.celery_app.celery", "beat", "-l", "INFO"]
+
+volumes:
+  jobflow_db:
